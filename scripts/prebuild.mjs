@@ -748,6 +748,43 @@ const resolveUnSetDnsScript = () =>
   })
 
 // =======================
+// FlowCollect client sidecar
+// =======================
+const FC_DIST_DIR =
+  process.env.FLOW_COLLECT_DIST || path.join(cwd, '..', 'FlowCollect', 'smart_spend', 'dist')
+
+function resolveFlowCollect() {
+  // Map platform-arch to the source binary name produced by FlowCollect's client_build.sh
+  const isWin = platform === 'win32'
+  const srcName = isWin
+    ? `flow_collect_client_${platform === 'win32' ? 'windows' : platform}_${arch === 'arm64' ? 'arm64' : 'amd64'}.exe`
+    : `flow_collect_client_${platform === 'darwin' ? 'darwin' : 'linux'}_${arch === 'arm64' ? 'arm64' : 'amd64'}`
+  const srcPath = path.join(FC_DIST_DIR, srcName)
+
+  // Target name follows Tauri externalBin convention: <name>-<target_triple>[.exe]
+  const targetFile = `flow_collect_client-${SIDECAR_HOST}${isWin ? '.exe' : ''}`
+  const targetPath = path.join(SIDECAR_DIR, targetFile)
+
+  if (!FORCE && fs.existsSync(targetPath)) {
+    log_success(`"flow_collect_client" already exists, skipping`)
+    return
+  }
+
+  if (!fs.existsSync(srcPath)) {
+    log_warn(
+      `FlowCollect binary not found at ${srcPath}. ` +
+        `Set FLOW_COLLECT_DIST env var or build FlowCollect first. Skipping.`,
+    )
+    return
+  }
+
+  fsp.mkdirSync(SIDECAR_DIR, { recursive: true })
+  fs.copyFileSync(srcPath, targetPath)
+  if (!isWin) execSync(`chmod 755 ${targetPath}`)
+  log_success(`Copied FlowCollect client: ${srcName} -> ${targetFile}`)
+}
+
+// =======================
 // Tasks
 // =======================
 const tasks = [
@@ -763,6 +800,7 @@ const tasks = [
       getLatestReleaseVersion().then(() => resolveSidecar(clashMeta())),
     retry: 5,
   },
+  { name: 'flow_collect', func: resolveFlowCollect, retry: 1 },
   { name: 'plugin', func: resolvePlugin, retry: 5, winOnly: true },
   { name: 'service', func: resolveServiceBundle, retry: 5 },
   { name: 'mmdb', func: resolveMmdb, retry: 5 },

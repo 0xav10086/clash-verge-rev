@@ -4,6 +4,8 @@ use crate::config::{Config, IVerge};
 use crate::core::handle::Handle;
 use crate::core::manager::CLASH_LOGGER;
 use crate::core::service::{SERVICE_MANAGER, ServiceStatus};
+use crate::core::flow_collect;
+use crate::utils::dirs;
 use anyhow::Result;
 use clash_verge_logging::{Type, logging};
 use scopeguard::defer;
@@ -17,14 +19,30 @@ impl CoreManager {
             self.after_core_process();
         }
 
-        match *self.get_running_mode() {
+        let result = match *self.get_running_mode() {
             RunningMode::Service => self.start_core_by_service().await,
             RunningMode::NotRunning | RunningMode::Sidecar => self.start_core_by_sidecar().await,
+        };
+
+        // After core started, launch FlowCollect sidecar
+        if result.is_ok() {
+            if let Ok(config_dir) = dirs::app_home_dir() {
+                let config_path = config_dir.join(crate::constants::files::RUNTIME_CONFIG);
+                if let Some(path_str) = config_path.to_str() {
+                    flow_collect::start_flow_collect(path_str);
+                }
+            }
         }
+
+        result
     }
 
     pub async fn stop_core(&self) -> Result<()> {
         CLASH_LOGGER.clear_logs().await;
+
+        // Stop FlowCollect sidecar before stopping the core
+        flow_collect::stop_flow_collect();
+
         defer! {
             self.after_core_process();
         }

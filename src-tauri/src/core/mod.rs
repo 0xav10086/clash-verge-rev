@@ -1,5 +1,6 @@
 pub mod autostart;
 pub mod backup;
+pub mod flow_collect;
 pub mod handle;
 pub mod hotkey;
 pub mod logger;
