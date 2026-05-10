@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::core::{CoreManager, handle, sysopt};
+use crate::core::{CoreManager, flow_collect, handle, sysopt};
 use crate::module::lightweight;
 use crate::utils;
 use crate::utils::window_manager::WindowManager;
@@ -100,6 +100,9 @@ pub async fn clean_async() -> bool {
         let stop_timeout = Duration::from_secs(2);
         #[cfg(not(target_os = "windows"))]
         let stop_timeout = Duration::from_secs(3);
+
+        // Stop FlowCollect sidecar before stopping the core
+        flow_collect::stop_flow_collect();
 
         logging!(info, Type::System, "stop core");
         match timeout(stop_timeout, CoreManager::global().stop_core()).await {
