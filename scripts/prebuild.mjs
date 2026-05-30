@@ -751,17 +751,19 @@ const resolveUnSetDnsScript = () =>
 // FlowCollect client sidecar
 // =======================
 const FC_DIST_DIR =
-  process.env.FLOW_COLLECT_DIST || path.join(cwd, '..', 'FlowCollect', 'smart_spend', 'dist')
+  process.env.FLOW_COLLECT_DIST || path.join(cwd, '..', 'FlowCollect', 'client', 'bin')
+const FC_GITHUB_REPO = '0xav10086/FlowCollect'
 
-function resolveFlowCollect() {
-  // Map platform-arch to the source binary name produced by FlowCollect's client_build.sh
+function flowCollectBinName() {
   const isWin = platform === 'win32'
-  const srcName = isWin
-    ? `flow_collect_client_${platform === 'win32' ? 'windows' : platform}_${arch === 'arm64' ? 'arm64' : 'amd64'}.exe`
-    : `flow_collect_client_${platform === 'darwin' ? 'darwin' : 'linux'}_${arch === 'arm64' ? 'arm64' : 'amd64'}`
-  const srcPath = path.join(FC_DIST_DIR, srcName)
+  const plat = isWin ? 'windows' : platform === 'darwin' ? 'darwin' : 'linux'
+  const a = arch === 'arm64' ? 'arm64' : 'amd64'
+  return `flow_collect_client_${plat}_${a}${isWin ? '.exe' : ''}`
+}
 
-  // Target name follows Tauri externalBin convention: <name>-<target_triple>[.exe]
+async function resolveFlowCollect() {
+  const isWin = platform === 'win32'
+  const srcName = flowCollectBinName()
   const targetFile = `flow_collect_client-${SIDECAR_HOST}${isWin ? '.exe' : ''}`
   const targetPath = path.join(SIDECAR_DIR, targetFile)
 
@@ -770,18 +772,56 @@ function resolveFlowCollect() {
     return
   }
 
-  if (!fs.existsSync(srcPath)) {
-    log_warn(
-      `FlowCollect binary not found at ${srcPath}. ` +
-        `Set FLOW_COLLECT_DIST env var or build FlowCollect first. Skipping.`,
-    )
+  // 1. Try local build
+  const srcPath = path.join(FC_DIST_DIR, srcName)
+  if (fs.existsSync(srcPath)) {
+    await fsp.mkdir(SIDECAR_DIR, { recursive: true })
+    await fsp.copyFile(srcPath, targetPath)
+    if (!isWin) execSync(`chmod 755 ${targetPath}`)
+    log_success(`Copied FlowCollect client (local): ${srcName} -> ${targetFile}`)
     return
   }
 
-  fsp.mkdirSync(SIDECAR_DIR, { recursive: true })
-  fs.copyFileSync(srcPath, targetPath)
-  if (!isWin) execSync(`chmod 755 ${targetPath}`)
-  log_success(`Copied FlowCollect client: ${srcName} -> ${targetFile}`)
+  // 2. Download from GitHub Release
+  log_info(`Local binary not found, downloading from GitHub Release...`)
+  try {
+    const apiURL = `https://api.github.com/repos/${FC_GITHUB_REPO}/releases/latest`
+    const options = {}
+    const httpProxy =
+      process.env.HTTP_PROXY ||
+      process.env.http_proxy ||
+      process.env.HTTPS_PROXY ||
+      process.env.https_proxy
+    if (httpProxy) options.agent = new HttpsProxyAgent(httpProxy)
+
+    const resp = await fetch(apiURL, {
+      ...options,
+      headers: { 'User-Agent': 'clash-verge-rev-prebuild' },
+    })
+    if (!resp.ok) throw new Error(`GitHub API error: ${resp.status}`)
+
+    const release = await resp.json()
+    const tag = release.tag_name
+    log_info(`Latest FlowCollect release: ${tag}`)
+
+    const asset = release.assets.find((a) => a.name === srcName)
+    if (!asset) {
+      log_warn(`Asset ${srcName} not found in ${tag}, skipping`)
+      return
+    }
+
+    const downloadURL = asset.browser_download_url
+    const tempPath = path.join(TEMP_DIR, srcName)
+    await fsp.mkdir(TEMP_DIR, { recursive: true })
+    await downloadFile(downloadURL, tempPath)
+
+    await fsp.mkdir(SIDECAR_DIR, { recursive: true })
+    await fsp.copyFile(tempPath, targetPath)
+    if (!isWin) execSync(`chmod 755 ${targetPath}`)
+    log_success(`Downloaded FlowCollect client: ${srcName} (${tag}) -> ${targetFile}`)
+  } catch (err) {
+    log_warn(`Failed to download FlowCollect client: ${err.message}. Skipping.`)
+  }
 }
 
 // =======================
@@ -800,7 +840,7 @@ const tasks = [
       getLatestReleaseVersion().then(() => resolveSidecar(clashMeta())),
     retry: 5,
   },
-  { name: 'flow_collect', func: resolveFlowCollect, retry: 1 },
+  { name: 'flow_collect', func: resolveFlowCollect, retry: 3 },
   { name: 'plugin', func: resolvePlugin, retry: 5, winOnly: true },
   { name: 'service', func: resolveServiceBundle, retry: 5 },
   { name: 'mmdb', func: resolveMmdb, retry: 5 },
