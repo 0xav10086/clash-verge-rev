@@ -806,7 +806,7 @@ async function resolveFlowCollect() {
 
     const asset = release.assets.find((a) => a.name === srcName)
     if (!asset) {
-      log_warn(`Asset ${srcName} not found in ${tag}, skipping`)
+      log_info(`Asset ${srcName} not found in ${tag}, skipping`)
       return
     }
 
@@ -820,7 +820,7 @@ async function resolveFlowCollect() {
     if (!isWin) execSync(`chmod 755 ${targetPath}`)
     log_success(`Downloaded FlowCollect client: ${srcName} (${tag}) -> ${targetFile}`)
   } catch (err) {
-    log_warn(`Failed to download FlowCollect client: ${err.message}. Skipping.`)
+    log_info(`Failed to download FlowCollect client: ${err.message}. Skipping.`)
   }
 }
 
