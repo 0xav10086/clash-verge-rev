@@ -14,22 +14,9 @@ use crate::utils::dirs;
 /// Tauri externalBin uses the `<name>-<target_triple>[.exe]` naming convention.
 fn binary_candidates() -> Vec<String> {
     let ext = if cfg!(windows) { ".exe" } else { "" };
-    let target = format!(
-        "{}-{}-{}",
-        std::env::consts::ARCH,
-        std::env::consts::VENDOR,
-        std::env::consts::OS
-    );
-    // Also try the full target triple with env (e.g., x86_64-pc-windows-msvc)
-    let target_env = format!(
-        "{}-{}-{}-{}",
-        std::env::consts::ARCH,
-        std::env::consts::VENDOR,
-        std::env::consts::OS,
-        std::env::consts::ENV
-    );
+    // TARGET is set by Cargo at compile time, e.g., "x86_64-pc-windows-msvc"
+    let target = env!("TARGET");
     vec![
-        format!("flow_collect_client-{}{}", target_env, ext),
         format!("flow_collect_client-{}{}", target, ext),
         format!("flow_collect_client{}", ext),
     ]
