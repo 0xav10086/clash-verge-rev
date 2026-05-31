@@ -10,12 +10,42 @@ use std::{
 use crate::singleton;
 use crate::utils::dirs;
 
+/// Returns the target triple at compile time (e.g., "x86_64-pc-windows-msvc").
+macro_rules! target_triple {
+    () => {
+        if cfg!(target_os = "windows") {
+            if cfg!(target_arch = "x86_64") {
+                "x86_64-pc-windows-msvc"
+            } else if cfg!(target_arch = "aarch64") {
+                "aarch64-pc-windows-msvc"
+            } else {
+                "i686-pc-windows-msvc"
+            }
+        } else if cfg!(target_os = "macos") {
+            if cfg!(target_arch = "aarch64") {
+                "aarch64-apple-darwin"
+            } else {
+                "x86_64-apple-darwin"
+            }
+        } else if cfg!(target_os = "linux") {
+            if cfg!(target_arch = "aarch64") {
+                "aarch64-unknown-linux-gnu"
+            } else if cfg!(target_arch = "arm") {
+                "armv7-unknown-linux-gnueabihf"
+            } else {
+                "x86_64-unknown-linux-gnu"
+            }
+        } else {
+            "unknown"
+        }
+    };
+}
+
 /// Candidate binary names to search for, in priority order.
 /// Tauri externalBin uses the `<name>-<target_triple>[.exe]` naming convention.
 fn binary_candidates() -> Vec<String> {
     let ext = if cfg!(windows) { ".exe" } else { "" };
-    // TARGET is set by Cargo at compile time, e.g., "x86_64-pc-windows-msvc"
-    let target = env!("TARGET");
+    let target = target_triple!();
     vec![
         format!("flow_collect_client-{}{}", target, ext),
         format!("flow_collect_client{}", ext),
