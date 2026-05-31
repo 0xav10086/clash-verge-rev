@@ -795,10 +795,12 @@ async function resolveFlowCollect() {
       process.env.https_proxy
     if (httpProxy) options.agent = new HttpsProxyAgent(httpProxy)
 
-    const resp = await fetch(apiURL, {
-      ...options,
-      headers: { 'User-Agent': 'clash-verge-rev-prebuild' },
-    })
+    const headers = { 'User-Agent': 'clash-verge-rev-prebuild' }
+    // Use GITHUB_TOKEN if available (CI) to avoid rate limiting
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`
+    }
+    const resp = await fetch(apiURL, { ...options, headers })
     if (!resp.ok) throw new Error(`GitHub API error: ${resp.status}`)
 
     const release = await resp.json()
