@@ -34,7 +34,7 @@
 | `src-tauri/src/feat/window.rs` | 修改 | `clean_async()` 中注入 `flow_collect::stop_flow_collect()` 确保退出时清理 |
 | `src-tauri/tauri.conf.json` | 修改 | `externalBin` 数组追加 `"sidecar/flow_collect_client"` |
 | `src-tauri/tauri.linux.conf.json` | 修改 | `externalBin` 数组追加 `"./sidecar/flow_collect_client"` |
-| `scripts/prebuild.mjs` | 修改 | 新增 `resolveFlowCollect()` 任务：从 `FLOW_COLLECT_DIST` 拷贝 FC 二进制到 sidecar 目录 |
+| `scripts/prebuild.mjs` | 修改 | 新增 `resolveFlowCollect()` 任务：优先从本地拷贝，否则从 FlowCollect GitHub Release 下载 |
 
 **Rebase 冲突处理原则**：遇到上述文件冲突时，优先保留本 Fork 的 FlowCollect 注入逻辑，同时融合上游的新结构。若无法自动推断，停止并等待人类介入。
 
@@ -85,11 +85,69 @@ git push origin HEAD --force
 |------|------|
 | Rust / Cargo | Tauri 后端编译 |
 | Bun / pnpm | Vue 前端依赖安装与构建 |
-| `FLOW_COLLECT_DIST` 环境变量 | 指向 FlowCollect 客户端二进制目录，`prebuild.mjs` 用它拷贝 sidecar |
+| `FLOW_COLLECT_DIST` 环境变量 | 指向 FlowCollect 客户端二进制目录，`prebuild.mjs` 用它拷贝 sidecar（可选，未设置则从 GitHub Release 下载） |
 
 ---
 
-## 6. 与 FlowCollect 生态的关系
+## 6. 本地预检流程（推 CI 前必做）
+
+**在推送 tag 触发 Release CI 之前，必须在本地完成以下检查，避免浪费 CI 资源。**
+
+### 6.1 Rust 编译检查
+
+```bash
+cd src-tauri && cargo check
+```
+
+检查所有 Rust 代码能否通过编译，包括：
+- `flow_collect.rs` 中的平台常量（`cfg!` 宏）
+- `lifecycle.rs` 中的 Sidecar 生命周期钩子
+- 所有 `use` 导入是否正确
+
+**常见错误**：
+- 使用了不存在的 `std::env::consts::VENDOR` → 应用 `cfg!` 宏构造 target triple
+- 忘记注册 `pub mod flow_collect` → 检查 `src/core/mod.rs`
+
+### 6.2 prebuild 脚本测试
+
+```bash
+node scripts/prebuild.mjs
+```
+
+验证：
+- mihomo 内核能否正常下载
+- FlowCollect 二进制能否从 GitHub Release 下载（或从本地 `FLOW_COLLECT_DIST` 拷贝）
+- 所有 sidecar 是否正确放置到 `src-tauri/sidecar/`
+
+**常见错误**：
+- `log_warn is not defined` → 日志函数只有 `log_debug / log_info / log_success / log_error`
+- GitHub API 403 → 确保 `GITHUB_TOKEN` 环境变量已设置，或本地网络可访问 GitHub
+
+### 6.3 版本号一致性
+
+确保以下两处版本号一致：
+- `package.json` 中的 `version` 字段
+- 即将推送的 git tag（格式 `v<version>`）
+
+```bash
+# 检查
+cat package.json | grep '"version"'
+# 期望输出: "version": "2.5.1"
+# 对应 tag: v2.5.1
+```
+
+### 6.4 完整预检清单
+
+```bash
+# 一键预检（在项目根目录执行）
+cd src-tauri && cargo check && cd .. && node scripts/prebuild.mjs && echo "✅ 预检通过，可以推送 tag"
+```
+
+**只有预检全部通过后，才允许执行 `git tag` 和 `git push origin <tag>`。**
+
+---
+
+## 7. 与 FlowCollect 生态的关系
 
 ```
 FlowCollect (核心仓库)
@@ -100,4 +158,4 @@ FlowCollect (核心仓库)
       └── clash-verge-rev → 桌面客户端，集成 FC Sidecar
 ```
 
-FlowCollect Release CI 自动编译所有平台的 `flow_collect_client` 二进制。本 Fork 的 `prebuild.mjs` 在构建时从 `FLOW_COLLECT_DIST` 目录拷贝对应架构的二进制到 Tauri sidecar 目录。
+FlowCollect Release CI 自动编译所有平台的 `flow_collect_client` 二进制。本 Fork 的 `prebuild.mjs` 在构建时优先从本地 `FLOW_COLLECT_DIST` 目录拷贝，若不存在则自动从 FlowCollect GitHub Release 下载对应架构的二进制到 Tauri sidecar 目录。

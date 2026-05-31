@@ -69,6 +69,23 @@ Supports Windows (x64/x86), Linux (x64/arm64) and macOS 11+ (intel/apple).
 - 可视化节点和规则编辑
 - WebDav 配置备份和同步
 
+### FlowCollect 流量审计集成（本 Fork 特有）
+
+本 Fork 在上游基础上注入了 [FlowCollect](https://github.com/0xav10086/FlowCollect) Sidecar 流量审计能力：
+
+- **自动生命周期管理**：Clash Verge Rev 启动 mihomo 时自动启动 FlowCollect Sidecar，退出时自动停止
+- **双协议 Mihomo API 连接**：支持 HTTP 和 IPC（Windows 命名管道 / Unix Socket）两种方式连接 mihomo API
+- **自动下载 Sidecar**：`prebuild.mjs` 在构建时自动从 [FlowCollect Release](https://github.com/0xav10086/FlowCollect/releases) 下载对应架构的客户端二进制
+- **配置驱动**：Sidecar 读取 Clash 配置文件中的 `x-flow-collect` 字段，无需额外配置文件
+
+```yaml
+# 在 Clash 配置文件中添加以下字段即可启用流量审计
+x-flow-collect:
+  remote-server: "https://nas.example.com"
+  remote-token: "YourSecretToken"
+  device-id: "my-pc"  # 可选，留空则自动使用系统主机名
+```
+
 ### FAQ
 
 Refer to [Doc FAQ Page](https://clash-verge-rev.github.io/faq/windows.html)
