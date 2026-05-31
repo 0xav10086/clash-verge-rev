@@ -136,10 +136,19 @@ impl FlowCollectManager {
             config_path
         );
 
-        let child = Command::new(&binary)
-            .args(["-c", config_path])
+        let mut cmd = Command::new(&binary);
+        cmd.args(["-c", config_path])
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+
+        // Windows: hide the console window for the sidecar process
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let child = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn FlowCollect client: {:?}", binary))?;
 
